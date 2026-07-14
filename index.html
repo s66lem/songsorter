@@ -10,7 +10,7 @@
 <body>
   <header>
     <h1>🎛️ SongSorter</h1>
-    <p class="tagline">Paste a Spotify playlist → cross-reference genres against MusicBrainz, Last.fm &amp; Spotify → get genre playlists back in your account.</p>
+    <p class="tagline">Paste a Spotify playlist → cross-reference genres against MusicBrainz, Discogs, Last.fm &amp; Spotify → get genre playlists back in your account.</p>
     <div id="auth-status" class="auth-status"></div>
   </header>
 
@@ -31,6 +31,9 @@
         </label>
         <label>Last.fm API key <span class="optional">(optional — improves genre accuracy with per-track tags; get one free at <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api</a>)</span>
           <input id="lastfm-key" type="text" placeholder="optional" autocomplete="off" spellcheck="false" />
+        </label>
+        <label>Discogs personal token <span class="optional">(optional — adds Discogs release “styles”, the most RYM-like taxonomy; free at <a href="https://www.discogs.com/settings/developers" target="_blank" rel="noopener">discogs.com/settings/developers</a>)</span>
+          <input id="discogs-token" type="text" placeholder="optional" autocomplete="off" spellcheck="false" />
         </label>
         <label class="checkbox-label">
           <input id="use-musicbrainz" type="checkbox" checked />
@@ -99,9 +102,10 @@
   <footer>
     <p>
       Genre data: your Spotify library metadata, <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>
-      (open database), and optionally <a href="https://www.last.fm/api" target="_blank" rel="noopener">Last.fm</a>.
-      RateYourMusic has no public API and disallows scraping, so it isn't queried —
-      MusicBrainz + Last.fm provide comparable community-sourced genre tagging.
+      (open database), and optionally <a href="https://www.last.fm/api" target="_blank" rel="noopener">Last.fm</a>
+      and <a href="https://www.discogs.com/developers" target="_blank" rel="noopener">Discogs</a>.
+      RateYourMusic has no public API yet and disallows scraping, so it isn't queried —
+      these databases provide comparable community-sourced genre tagging.
     </p>
   </footer>
 

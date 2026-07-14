@@ -16,9 +16,11 @@ normalized and merged:
 | Source | What it provides | Weight |
 |---|---|---|
 | Last.fm `track.getTopTags` (optional) | Per-**track** community tags — the most precise signal | 3× |
+| Discogs release styles (optional) | Granular per-release styles — the most RYM-like taxonomy (Shoegaze, Italo-Disco, Boom Bap…) | 2.5× |
 | Spotify artist metadata | Spotify's own genre labels per artist | 2× |
 | MusicBrainz | Open-database genres + community tags per artist | 2× |
 | Last.fm `artist.getTopTags` (optional) | Per-artist community tags | 1× |
+| Discogs top-level genres (optional) | Very broad buckets (Rock, Electronic…) | 1× |
 
 Non-genre tags ("seen live", "favorites", decades, moods, nationalities) are
 filtered out. You choose the granularity:
@@ -33,10 +35,17 @@ pick exactly which genre buckets become playlists.
 ### Why not RateYourMusic?
 
 RYM's genre taxonomy is excellent, but it has **no public API** and its terms
-of service prohibit scraping. MusicBrainz (fully open database) and Last.fm
-(free API) provide comparable community-sourced genre data, so SongSorter
-uses those instead. If RYM/Sonemic ever ships a public API, it would slot
-into `js/genres.js` as another vote source.
+of service prohibit scraping. RYM doesn't pull its genres from anywhere —
+they're voted per-release by its own users — so there's no upstream source
+to tap either. The old
+[beets-rymgenre](https://github.com/jcazevedo/beets-rymgenre) scraper is not
+used here: it's an abandoned Python/beets plugin whose author was banned from
+RYM in 2016 for the scraping and now recommends against it. Instead,
+SongSorter uses the openly accessible databases built the same way
+(community voting): Discogs styles, MusicBrainz genres, and Last.fm tags.
+RYM's Sonemic project has an official API on its roadmap
+([register interest](https://rateyourmusic.com/data-access/register-interest/));
+when it ships, it would slot into `js/genres.js` as another vote source.
 
 ## Setup
 
@@ -57,7 +66,15 @@ within one artist. Create a key at
 [last.fm/api/account/create](https://www.last.fm/api/account/create) —
 instant and free.
 
-### 3. Run it
+### 3. (Optional) Get a Discogs personal token
+
+Discogs release **styles** are the closest legitimate equivalent to RYM's
+granular genres. Generate a personal access token at
+[discogs.com/settings/developers](https://www.discogs.com/settings/developers)
+(free, no app registration needed). Lookups are per-track and throttled to
+Discogs' 60 requests/minute limit, with results cached in localStorage.
+
+### 4. Run it
 
 **Locally:**
 
@@ -80,10 +97,10 @@ localStorage), connect, and sort.
    creating playlists.
 2. **Choose a playlist** — paste any playlist link/URI/ID, or pick from your
    own playlists.
-3. **Wait for analysis** — Spotify lookups are fast; MusicBrainz is throttled
-   to 1 request/second per their API etiquette (results are cached in
-   localStorage, so re-runs are much faster). You can disable MusicBrainz in
-   the settings for a quick pass.
+3. **Wait for analysis** — Spotify and Last.fm lookups are fast; MusicBrainz
+   and Discogs are throttled to ~1 request/second per their API rules
+   (results are cached in localStorage, so re-runs are much faster). You can
+   disable MusicBrainz or leave the Discogs token empty for a quick pass.
 4. **Review** — switch granularity, tick the genre buckets you want, move
    individual tracks between genres.
 5. **Create playlists** — choose a naming pattern (default:
@@ -96,7 +113,7 @@ localStorage), connect, and sort.
 index.html      UI skeleton
 css/styles.css  styling
 js/spotify.js   PKCE auth + Spotify Web API client
-js/genres.js    MusicBrainz / Last.fm lookups, tag normalization, vote merging
+js/genres.js    MusicBrainz / Discogs / Last.fm lookups, tag normalization, vote merging
 js/app.js       orchestration and UI logic
 ```
 

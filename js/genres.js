@@ -1,17 +1,22 @@
 // Genre resolution: merge tags from Spotify artist metadata, MusicBrainz,
-// and (optionally) Last.fm into one weighted vote per track, then resolve
-// each track to a genre at the chosen granularity.
+// Discogs, and (optionally) Last.fm into one weighted vote per track, then
+// resolve each track to a genre at the chosen granularity.
 //
-// RateYourMusic has no public API and its terms forbid scraping, so it is
-// deliberately not queried. MusicBrainz genres and Last.fm community tags
-// cover the same ground with open access.
+// RateYourMusic has no public API and its terms forbid scraping (the old
+// beets-rymgenre scraper got its own author banned in 2016 and is
+// abandoned), so RYM is deliberately not queried. Discogs styles,
+// MusicBrainz genres, and Last.fm community tags cover the same ground
+// with open access; the planned Sonemic API would slot in here as
+// another vote source.
 
 // ---------------------------------------------------------------- weights
 const WEIGHT = {
-  lastfmTrack: 3,   // per-track community tags are the strongest signal
+  lastfmTrack: 3,    // per-track community tags are the strongest signal
+  discogsStyle: 2.5, // per-release "styles" are granular, RYM-like genres
   spotifyArtist: 2,
   musicbrainzArtist: 2,
   lastfmArtist: 1,
+  discogsGenre: 1,   // Discogs top-level genres are very broad
 };
 
 // ------------------------------------------------- tag cleanup / mapping
@@ -107,12 +112,12 @@ const MB_BASE = 'https://musicbrainz.org/ws/2';
 const mbThrottle = createThrottle(1100);
 const MB_CACHE_KEY = 'ss_mb_cache_v1';
 
-function loadMbCache() {
-  try { return JSON.parse(localStorage.getItem(MB_CACHE_KEY) || '{}'); }
+function loadCache(storageKey) {
+  try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
   catch { return {}; }
 }
-function saveMbCache(cache) {
-  try { localStorage.setItem(MB_CACHE_KEY, JSON.stringify(cache)); }
+function saveCache(storageKey, cache) {
+  try { localStorage.setItem(storageKey, JSON.stringify(cache)); }
   catch { /* quota exceeded — cache is best-effort */ }
 }
 
@@ -127,7 +132,7 @@ async function mbFetch(path) {
 
 // Returns string[] of genre tags for an artist name (cached in localStorage).
 export async function musicbrainzArtistGenres(artistName, signal) {
-  const cache = loadMbCache();
+  const cache = loadCache(MB_CACHE_KEY);
   const key = artistName.toLowerCase();
   if (key in cache) return cache[key];
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
@@ -153,8 +158,62 @@ export async function musicbrainzArtistGenres(artistName, signal) {
     return [];
   }
   cache[key] = genres;
-  saveMbCache(cache);
+  saveCache(MB_CACHE_KEY, cache);
   return genres;
+}
+
+// --------------------------------------------------------------- Discogs
+// Free API, personal token from discogs.com/settings/developers.
+// Rate limit is 60 requests/minute authenticated, so throttle to ~1/sec.
+// Release "styles" are the granular, RYM-like part of the taxonomy;
+// top-level "genres" (Rock, Electronic, …) are only a weak extra vote.
+const DISCOGS_BASE = 'https://api.discogs.com';
+const discogsThrottle = createThrottle(1100);
+const DISCOGS_CACHE_KEY = 'ss_discogs_cache_v1';
+const EMPTY_DISCOGS = { styles: [], genres: [] };
+
+// Returns { styles: string[], genres: string[] } for a track,
+// merged from the top search matches (cached in localStorage).
+export async function discogsTrackTags(token, artistName, trackName, signal) {
+  const cache = loadCache(DISCOGS_CACHE_KEY);
+  const key = `${artistName}|${trackName}`.toLowerCase();
+  if (key in cache) return cache[key];
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+
+  let result;
+  try {
+    await discogsThrottle();
+    const qs = new URLSearchParams({
+      artist: artistName,
+      track: trackName,
+      type: 'release',
+      per_page: '3',
+      token,
+    });
+    let res = await fetch(`${DISCOGS_BASE}/database/search?${qs}`);
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 5000));
+      res = await fetch(`${DISCOGS_BASE}/database/search?${qs}`);
+    }
+    if (res.status === 401) throw new Error('Discogs rejected the token — check it in settings.');
+    if (!res.ok) throw new Error(`Discogs error ${res.status}`);
+    const data = await res.json();
+    const styles = new Set();
+    const genres = new Set();
+    for (const release of (data.results || []).slice(0, 3)) {
+      for (const s of release.style || []) styles.add(s);
+      for (const g of release.genre || []) genres.add(g);
+    }
+    result = { styles: [...styles], genres: [...genres] };
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
+    if (err.message.includes('token')) throw err; // bad token: fail loudly
+    // Network/API hiccup: return empty but don't cache, so it retries next run.
+    return EMPTY_DISCOGS;
+  }
+  cache[key] = result;
+  saveCache(DISCOGS_CACHE_KEY, cache);
+  return result;
 }
 
 // -------------------------------------------------------------- Last.fm

@@ -1,7 +1,7 @@
 import * as spotify from './spotify.js';
 import {
   addVotes, resolveGenre, WEIGHT,
-  musicbrainzArtistGenres, lastfmTrackTags, lastfmArtistTags,
+  musicbrainzArtistGenres, lastfmTrackTags, lastfmArtistTags, discogsTrackTags,
 } from './genres.js';
 
 // --------------------------------------------------------------- state
@@ -20,6 +20,7 @@ const els = {
   setupDetails: $('setup-details'),
   clientId: $('client-id'),
   lastfmKey: $('lastfm-key'),
+  discogsToken: $('discogs-token'),
   useMusicbrainz: $('use-musicbrainz'),
   connectBtn: $('connect-btn'),
   disconnectBtn: $('disconnect-btn'),
@@ -77,6 +78,7 @@ function showConnected() {
 async function init() {
   els.clientId.value = spotify.getClientId();
   els.lastfmKey.value = localStorage.getItem('ss_lastfm_key') || '';
+  els.discogsToken.value = localStorage.getItem('ss_discogs_token') || '';
 
   try {
     await spotify.handleRedirect();
@@ -96,6 +98,7 @@ async function init() {
 els.connectBtn.addEventListener('click', async () => {
   spotify.setClientId(els.clientId.value);
   localStorage.setItem('ss_lastfm_key', els.lastfmKey.value.trim());
+  localStorage.setItem('ss_discogs_token', els.discogsToken.value.trim());
   try {
     await spotify.beginLogin();
   } catch (err) {
@@ -158,6 +161,7 @@ async function analyze(playlistId) {
   const abort = new AbortController();
   state.abort = abort;
   const lastfmKey = els.lastfmKey.value.trim();
+  const discogsToken = els.discogsToken.value.trim();
   const useMb = els.useMusicbrainz.checked;
 
   els.resultsCard.classList.add('hidden');
@@ -177,10 +181,10 @@ async function analyze(playlistId) {
     if (tracks.length === 0) throw new Error('This playlist has no usable tracks.');
     state.tracks = tracks.map((t) => ({ ...t, votes: new Map(), override: null }));
 
-    // 2. Spotify artist genres (10-25%)
+    // 2. Spotify artist genres (10-20%)
     const artistIds = tracks.flatMap((t) => t.artists.map((a) => a.id));
     const spotifyGenres = await spotify.getArtistGenres(artistIds, (done, total) =>
-      setProgress(0.1 + 0.15 * (done / total), `Spotify artist genres… ${done}/${total} artists`));
+      setProgress(0.1 + 0.1 * (done / total), `Spotify artist genres… ${done}/${total} artists`));
     if (abort.signal.aborted) return;
     for (const track of state.tracks) {
       for (const artist of track.artists) {
@@ -188,7 +192,7 @@ async function analyze(playlistId) {
       }
     }
 
-    // 3. Last.fm per-track + per-artist tags (25-60%), concurrent-friendly
+    // 3. Last.fm per-track + per-artist tags (20-45%), concurrent-friendly
     if (lastfmKey) {
       const artistNames = [...new Set(tracks.map((t) => t.artists[0]?.name).filter(Boolean))];
       const artistTagCache = new Map();
@@ -204,7 +208,7 @@ async function analyze(playlistId) {
         }
         addVotes(track.votes, await artistTagCache.get(artist), WEIGHT.lastfmArtist);
         done += 1;
-        setProgress(0.25 + 0.35 * (done / state.tracks.length),
+        setProgress(0.2 + 0.25 * (done / state.tracks.length),
           `Last.fm tags… ${done}/${state.tracks.length} tracks (${artistNames.length} artists)`);
       });
       // Limit concurrency to stay friendly to the API.
@@ -212,14 +216,30 @@ async function analyze(playlistId) {
       if (abort.signal.aborted) return;
     }
 
-    // 4. MusicBrainz artist genres (60-100%) — 1 req/sec per their rules
+    // 4. Discogs per-track styles/genres (45-70%) — throttled to their
+    //    60 req/min limit, cached, so re-runs skip straight through
+    if (discogsToken) {
+      for (let i = 0; i < state.tracks.length; i += 1) {
+        if (abort.signal.aborted) return;
+        const track = state.tracks[i];
+        const artist = track.artists[0]?.name;
+        if (!artist) continue;
+        setProgress(0.45 + 0.25 * (i / state.tracks.length),
+          `Discogs… ${i + 1}/${state.tracks.length} tracks (throttled to 1/sec — cached for next time)`);
+        const { styles, genres } = await discogsTrackTags(discogsToken, artist, track.name, abort.signal);
+        addVotes(track.votes, styles, WEIGHT.discogsStyle);
+        addVotes(track.votes, genres, WEIGHT.discogsGenre);
+      }
+    }
+
+    // 5. MusicBrainz artist genres (70-100%) — 1 req/sec per their rules
     if (useMb) {
       const uniqueArtists = [...new Set(tracks.map((t) => t.artists[0]?.name).filter(Boolean))];
       const mbGenres = new Map();
       for (let i = 0; i < uniqueArtists.length; i += 1) {
         if (abort.signal.aborted) return;
         const name = uniqueArtists[i];
-        setProgress(0.6 + 0.4 * (i / uniqueArtists.length),
+        setProgress(0.7 + 0.3 * (i / uniqueArtists.length),
           `MusicBrainz… ${i + 1}/${uniqueArtists.length} artists (throttled to 1/sec — cached for next time)`);
         mbGenres.set(name, await musicbrainzArtistGenres(name, abort.signal));
       }
