@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SongSorter — sort a Spotify playlist by genre</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎛️</text></svg>" />
+</head>
+<body>
+  <header>
+    <h1>🎛️ SongSorter</h1>
+    <p class="tagline">Paste a Spotify playlist → cross-reference genres against MusicBrainz, Last.fm &amp; Spotify → get genre playlists back in your account.</p>
+    <div id="auth-status" class="auth-status"></div>
+  </header>
+
+  <main>
+    <!-- Step 1: connect -->
+    <section id="setup-card" class="card">
+      <h2><span class="step">1</span> Connect Spotify</h2>
+      <details id="setup-details">
+        <summary>App settings (one-time setup)</summary>
+        <p class="hint">
+          Create a free app at
+          <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>,
+          add this page's exact URL as a Redirect URI, then paste the Client ID below.
+          Everything runs in your browser — no server, nothing is uploaded anywhere.
+        </p>
+        <label>Spotify Client ID
+          <input id="client-id" type="text" placeholder="e.g. 5f2a…" autocomplete="off" spellcheck="false" />
+        </label>
+        <label>Last.fm API key <span class="optional">(optional — improves genre accuracy with per-track tags; get one free at <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api</a>)</span>
+          <input id="lastfm-key" type="text" placeholder="optional" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="checkbox-label">
+          <input id="use-musicbrainz" type="checkbox" checked />
+          Query MusicBrainz for artist genres (free, no key, ~1 artist/sec — results are cached)
+        </label>
+      </details>
+      <button id="connect-btn" class="primary">Connect to Spotify</button>
+      <button id="disconnect-btn" class="ghost hidden">Disconnect</button>
+    </section>
+
+    <!-- Step 2: playlist input -->
+    <section id="input-card" class="card hidden">
+      <h2><span class="step">2</span> Choose a playlist</h2>
+      <label>Playlist link, URI, or ID
+        <input id="playlist-input" type="text" placeholder="https://open.spotify.com/playlist/…" spellcheck="false" />
+      </label>
+      <div class="row">
+        <button id="load-btn" class="primary">Analyze playlist</button>
+        <button id="my-playlists-btn" class="ghost">…or pick from my playlists</button>
+      </div>
+      <ul id="playlist-picker" class="playlist-picker hidden"></ul>
+    </section>
+
+    <!-- Step 3: analysis progress -->
+    <section id="progress-card" class="card hidden">
+      <h2><span class="step">3</span> Analyzing <span id="playlist-name"></span></h2>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="progress-text" class="hint"></p>
+      <button id="cancel-btn" class="ghost">Cancel</button>
+    </section>
+
+    <!-- Step 4: results & options -->
+    <section id="results-card" class="card hidden">
+      <h2><span class="step">4</span> Review genres</h2>
+      <div class="row options-row">
+        <label class="inline">Granularity
+          <select id="granularity">
+            <option value="broad">Broad (Rock, Electronic, Hip Hop…)</option>
+            <option value="detailed" selected>Detailed (Shoegaze, Jungle, Neo-Soul…)</option>
+          </select>
+        </label>
+        <label class="inline">Min. tracks per playlist
+          <input id="min-tracks" type="number" min="1" value="3" />
+        </label>
+        <button id="select-all-btn" class="ghost small">Select all</button>
+        <button id="select-none-btn" class="ghost small">Select none</button>
+      </div>
+      <div id="genre-buckets"></div>
+    </section>
+
+    <!-- Step 5: export -->
+    <section id="export-card" class="card hidden">
+      <h2><span class="step">5</span> Create playlists</h2>
+      <label>Playlist name pattern <span class="optional">({genre} and {source} are replaced)</span>
+        <input id="name-pattern" type="text" value="{source} — {genre}" spellcheck="false" />
+      </label>
+      <label class="checkbox-label">
+        <input id="public-playlists" type="checkbox" />
+        Make created playlists public
+      </label>
+      <button id="create-btn" class="primary">Create <span id="create-count"></span> playlists in my account</button>
+      <ul id="created-list" class="created-list"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      Genre data: your Spotify library metadata, <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>
+      (open database), and optionally <a href="https://www.last.fm/api" target="_blank" rel="noopener">Last.fm</a>.
+      RateYourMusic has no public API and disallows scraping, so it isn't queried —
+      MusicBrainz + Last.fm provide comparable community-sourced genre tagging.
+    </p>
+  </footer>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
